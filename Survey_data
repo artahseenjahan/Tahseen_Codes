@@ -1,0 +1,110 @@
+ use "/Users/tahseenjahan/Downloads/baseline_data.dta"
+
+describe
+list
+
+count if !missing(UHHID_bl) //[Assuming non-consenting households are included in descriptive records]
+ 
+ count if !missing(StructureID) //[Assuming non-consenting households are included in descriptive records]
+ 
+ count if Consent == 1 & !missing(UHHID_bl)
+ 
+ count if Consent == 1 & !missing(StructureID) 
+ 
+ //To ensure the grouping correctly by households or structures, I have used commands like sort and bysort
+ 
+ bysort UHHID_bl (Consent): gen household_consented = Consent == 1
+  br UHHID_bl household_consented
+  count if household_consented==1
+
+ bysort StructureID (Consent): gen structure_consented = Consent == 1
+  br StructureID structure_consented
+  count if  structure_consented==1
+  
+  
+
+  
+  use "/Users/tahseenjahan/Downloads/midline_data.dta"
+  
+  describe
+  list
+   tab visitresult
+   label list
+   gen matched= UHHID_midline == UHHID_bl
+   tab matched
+   count if matched==1  //[Baseline households that are in the dataset, including the ones where visit result are missing (.)]
+ count if visitresult == 1 & matched == 1 & !missing(UHHID_bl) //[Assuming that dot (.) means  the particular house data is counted missing] 
+ //29 households are matched among which 20 are located in the records
+  
+   
+  //For checking the Household Panel  [Checking if expectations met]
+  
+  use "/Users/tahseenjahan/Downloads/baseline_data.dta"
+  gen in_baseline = 1
+  save baseline_temp.dta, replace
+	
+  use "/Users/tahseenjahan/Downloads/midline_data.dta", clear
+	 gen in_midline = 1
+    duplicates report UHHID_bl
+	duplicates list UHHID_bl
+	duplicates drop UHHID_bl, force
+	merge 1:1 UHHID_bl using baseline_temp123.dta
+	 
+   tabulate _merge
+   tabulate visitresult if _merge == 3 //A panel of the original households (tracking them if they move)
+   count if _merge == 3 & visitresult == 1 
+ 
+ 
+ 
+ use "/Users/tahseenjahan/Downloads/linking_file.dta", clear 
+  describe
+  label list
+  br midline_Structurestatus
+  tabulate midline_Structurestatus
+ 
+  gen structure_no_exists = 0
+replace structure_no_exists = 1 if torndown == 1 //[Torndown hence no longer exists]
+count if structure_no_exists== 1
+
+gen unable_to_locate = 0
+replace unable_to_locate = 1 if midline_Structures == 0 & torndown == 0 //[Not even torn down, simply could not be located]
+ list UHHID_midline StructureID midline_Structures torndown unable_to_locate if unable_to_locate == 1
+ count if unable_to_locate == 1
+
+ tabulate midline_Structurestatus
+ gen located_not_torndown = 0
+replace located_not_torndown = 1 if midline_Structures == 1 & torndown == 0
+list UHHID_midline StructureID midline_Structures torndown located_not_torndown if located_not_torndown == 1
+gen survey_complete_located = 0
+ replace survey_complete_located = 1 if located_not_torndown == 1 & midline_HHstatus == 1 //[Located and not torn down hence survey completed]
+
+ count if survey_complete_located==1
+ 
+ tab midline_Structurestatus midline_HHstatus //[Others: To find Structure Not Found and Survey Withdrawn, Structure Found but still Survey Withdrawn, Structure Found and Survey Completed, Structure Not Found and Survey Completed]
+
+ 
+  tab midline_contact midline_HHstatus //[If HH Contact/Not contacted were considered]
+  
+  
+  //Extra [If HH Contact/Not contacted were asked]
+  
+  gen hh_contacted_withdrawn = 0
+replace hh_contacted_withdrawn = 1 if midline_contact == 1 & midline_HHstatus == 0
+ count if hh_contacted_withdrawn== 1 //[contacted but withdrawn]
+ 
+ gen hh_contacted_withdrawn_found = 0
+replace hh_contacted_withdrawn_found = 1 if midline_contact == 1 & midline_HHstatus == 0 & midline_Structures == 1
+count if hh_contacted_withdrawn_found==1 //[withdrawn after contacted even after finding structures- maybe because new people moved/household changed]
+
+gen hh_contacted_withdrawn_notfound = 0
+replace hh_contacted_withdrawn_notfound = 1 if midline_contact == 1 & midline_HHstatus == 0 & midline_Structures == 0
+count if hh_contacted_withdrawn_notfound ==1  //[not found but contacted- withdrawn but not torn down]
+
+gen not_contacted_not_found = 0
+replace not_contacted_not_found = 1 if midline_contact == 0 & midline_Structures == 0 
+gen missing_midline_HHstatus = 0
+replace missing_midline_HHstatus = 1 if missing(midline_HHstatus) 
+count if  missing_midline_HHstatus == 1  //[missing data]
+
+ 
+ clear
